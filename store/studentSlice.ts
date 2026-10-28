@@ -1,64 +1,130 @@
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { Student, INITIAL_STUDENTS } from "@/lib/studentData";
+import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import axios from "axios";
+import { Student } from "@/lib/studentData";
 
 interface StudentsState {
   students: Student[];
   selectedStudent: Student | null;
+  loading: boolean;
+  error: string | null;
 }
 
-const getInitialState = (): StudentsState => {
-  if (typeof window !== "undefined") {
-    const saved = localStorage.getItem("edupulse_students");
-    if (saved) {
-      try {
-        return {
-          students: JSON.parse(saved),
-          selectedStudent: null,
-        };
-      } catch (e) {
-        console.error("Failed to parse cached students:", e);
-      }
+const initialState: StudentsState = {
+  students: [],
+  selectedStudent: null,
+  loading: false,
+  error: null,
+};
+
+// Async thunks to communicate with backend Student API
+export const fetchStudents = createAsyncThunk(
+  "students/fetchStudents",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axios.get("/api/students");
+      return response.data.students as Student[];
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      return rejectWithValue(
+        axiosErr.response?.data?.error || "Failed to fetch students from API"
+      );
     }
   }
-  return {
-    students: INITIAL_STUDENTS,
-    selectedStudent: null,
-  };
-};
+);
+
+export const createStudent = createAsyncThunk(
+  "students/createStudent",
+  async (newStudent: Student, { rejectWithValue }) => {
+    try {
+      const response = await axios.post("/api/students", newStudent);
+      return response.data.student as Student;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      return rejectWithValue(
+        axiosErr.response?.data?.error || "Failed to register student"
+      );
+    }
+  }
+);
+
+export const updateStudentRecord = createAsyncThunk(
+  "students/updateStudentRecord",
+  async (student: Student, { rejectWithValue }) => {
+    try {
+      const response = await axios.put(
+        `/api/students/${encodeURIComponent(student.id)}`,
+        student
+      );
+      return response.data.student as Student;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      return rejectWithValue(
+        axiosErr.response?.data?.error || "Failed to update student"
+      );
+    }
+  }
+);
+
+export const removeStudent = createAsyncThunk(
+  "students/removeStudent",
+  async (id: string, { rejectWithValue }) => {
+    try {
+      await axios.delete(`/api/students/${encodeURIComponent(id)}`);
+      return id;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      return rejectWithValue(
+        axiosErr.response?.data?.error || "Failed to delete student"
+      );
+    }
+  }
+);
 
 export const studentSlice = createSlice({
   name: "students",
-  initialState: getInitialState(),
+  initialState,
   reducers: {
-    addStudent: (state, action: PayloadAction<Student>) => {
-      state.students.unshift(action.payload);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("edupulse_students", JSON.stringify(state.students));
-      }
-    },
-    updateStudent: (state, action: PayloadAction<Student>) => {
-      const index = state.students.findIndex((s) => s.id === action.payload.id);
-      if (index !== -1) {
-        state.students[index] = action.payload;
-        if (typeof window !== "undefined") {
-          localStorage.setItem("edupulse_students", JSON.stringify(state.students));
-        }
-      }
-      if (state.selectedStudent?.id === action.payload.id) {
-        state.selectedStudent = action.payload;
-      }
-    },
-    deleteStudent: (state, action: PayloadAction<string>) => {
-      state.students = state.students.filter((s) => s.id !== action.payload);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("edupulse_students", JSON.stringify(state.students));
-      }
-    },
     setSelectedStudent: (state, action: PayloadAction<Student | null>) => {
       state.selectedStudent = action.payload;
     },
   },
+  extraReducers: (builder) => {
+    // Fetch
+    builder.addCase(fetchStudents.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
+    builder.addCase(fetchStudents.fulfilled, (state, action) => {
+      state.loading = false;
+      state.students = action.payload;
+    });
+    builder.addCase(fetchStudents.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+    });
+
+    // Create
+    builder.addCase(createStudent.fulfilled, (state, action) => {
+      state.students.unshift(action.payload);
+    });
+
+    // Update
+    builder.addCase(updateStudentRecord.fulfilled, (state, action) => {
+      const idx = state.students.findIndex((s) => s.id === action.payload.id);
+      if (idx !== -1) {
+        state.students[idx] = action.payload;
+      }
+      if (state.selectedStudent?.id === action.payload.id) {
+        state.selectedStudent = action.payload;
+      }
+    });
+
+    // Delete
+    builder.addCase(removeStudent.fulfilled, (state, action) => {
+      state.students = state.students.filter((s) => s.id !== action.payload);
+    });
+  },
 });
 
-export const { addStudent, updateStudent, deleteStudent, setSelectedStudent } = studentSlice.actions;
+export const { setSelectedStudent } = studentSlice.actions;
 export default studentSlice.reducer;

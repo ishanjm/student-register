@@ -6,7 +6,12 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState, AppDispatch } from "@/store/store";
-import { addStudent, updateStudent, deleteStudent } from "@/store/studentSlice";
+import {
+  fetchStudents,
+  createStudent,
+  updateStudentRecord,
+  removeStudent,
+} from "@/store/studentSlice";
 import { StudentModal } from "@/components/StudentModal";
 import { AdminUsersManager } from "@/components/AdminUsersManager";
 import { Student } from "@/lib/studentData";
@@ -22,7 +27,6 @@ import {
   Plus,
   Filter,
   Download,
-  MoreVertical,
   Bell,
   CheckCircle2,
   Clock,
@@ -37,7 +41,7 @@ import {
   Trash2,
   ShieldCheck,
   LogOut,
-  User as UserIcon,
+  RefreshCw,
 } from "lucide-react";
 
 type SortKey = "id" | "name" | "course" | "year" | "status" | "gpa" | "enrolledDate";
@@ -54,7 +58,7 @@ interface AuthUser {
 export default function AdminHomePage() {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
-  const students = useSelector((state: RootState) => state.students.students);
+  const { students, loading, error } = useSelector((state: RootState) => state.students);
 
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,14 +66,14 @@ export default function AdminHomePage() {
   const [courseFilter, setCourseFilter] = useState<string>("All");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [activeTab, setActiveTab] = useState<"students" | "users" | "dashboard">("students");
+  const [activeTab, setActiveTab] = useState<"students" | "users">("students");
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
   useEffect(() => {
-    // Fetch logged in user details
+    // Fetch logged in user
     axios
       .get("/api/auth/me")
       .then((res) => {
@@ -77,10 +81,11 @@ export default function AdminHomePage() {
           setCurrentUser(res.data.user);
         }
       })
-      .catch(() => {
-        // middleware handles redirection, but fallback here
-      });
-  }, []);
+      .catch(() => {});
+
+    // Fetch students from backend API
+    dispatch(fetchStudents());
+  }, [dispatch]);
 
   const handleLogout = async () => {
     try {
@@ -198,17 +203,17 @@ export default function AdminHomePage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to remove this student record?")) {
-      dispatch(deleteStudent(id));
+  const handleDelete = async (id: string) => {
+    if (confirm("Are you sure you want to permanently remove this student record?")) {
+      await dispatch(removeStudent(id));
     }
   };
 
-  const handleModalSubmit = (student: Student) => {
+  const handleModalSubmit = async (student: Student) => {
     if (editingStudent) {
-      dispatch(updateStudent(student));
+      await dispatch(updateStudentRecord(student));
     } else {
-      dispatch(addStudent(student));
+      await dispatch(createStudent(student));
     }
   };
 
@@ -313,13 +318,23 @@ export default function AdminHomePage() {
 
           <div className="flex items-center gap-3">
             {activeTab === "students" && (
-              <button
-                onClick={handleOpenAdd}
-                className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-all shadow-indigo-600/20 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                Register Student
-              </button>
+              <>
+                <button
+                  onClick={() => dispatch(fetchStudents())}
+                  disabled={loading}
+                  title="Reload from API"
+                  className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo-600" : ""}`} />
+                </button>
+                <button
+                  onClick={handleOpenAdd}
+                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-all shadow-indigo-600/20 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Register Student
+                </button>
+              </>
             )}
 
             <button
@@ -338,6 +353,13 @@ export default function AdminHomePage() {
             <AdminUsersManager />
           ) : (
             <>
+              {error && (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  {error}
+                </div>
+              )}
+
               {/* Quick Metrics Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
@@ -345,7 +367,7 @@ export default function AdminHomePage() {
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Enrolled</p>
                     <h3 className="text-2xl font-bold text-slate-900 mt-1">{students.length}</h3>
                     <span className="text-[11px] font-medium text-emerald-600 mt-1 inline-flex items-center gap-1">
-                      Active database records
+                      Live MySQL database records
                     </span>
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
@@ -377,7 +399,7 @@ export default function AdminHomePage() {
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Average GPA</p>
                     <h3 className="text-2xl font-bold text-slate-900 mt-1">
                       {students.length > 0
-                        ? (students.reduce((acc, s) => acc + s.gpa, 0) / students.length).toFixed(2)
+                        ? (students.reduce((acc, s) => acc + (s.gpa || 0), 0) / students.length).toFixed(2)
                         : "0.00"}
                     </h3>
                     <span className="text-[11px] font-medium text-indigo-600 mt-1 inline-flex items-center gap-1">
@@ -543,7 +565,16 @@ export default function AdminHomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {filteredAndSortedStudents.length === 0 ? (
+                      {loading && students.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-500">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
+                              <p className="text-xs text-slate-600">Loading student records from API...</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : filteredAndSortedStudents.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="py-12 text-center text-slate-500">
                             <div className="flex flex-col items-center justify-center gap-2">
@@ -598,14 +629,14 @@ export default function AdminHomePage() {
                             <td className="py-3.5 px-4">
                               <span
                                 className={`font-semibold ${
-                                  student.gpa >= 3.8
+                                  (student.gpa || 0) >= 3.8
                                     ? "text-emerald-600 font-bold"
-                                    : student.gpa >= 3.0
+                                    : (student.gpa || 0) >= 3.0
                                     ? "text-slate-800"
                                     : "text-rose-600"
                                 }`}
                               >
-                                {student.gpa.toFixed(2)}
+                                {(student.gpa || 0).toFixed(2)}
                               </span>
                             </td>
                             <td className="py-3.5 px-4">{getStatusBadge(student.status)}</td>
@@ -675,7 +706,7 @@ export default function AdminHomePage() {
         </main>
       </div>
 
-      {/* Register / Edit Modal */}
+      {/* Register / Edit Modal using Formik */}
       <StudentModal
         isOpen={isModalOpen}
         onClose={() => {
