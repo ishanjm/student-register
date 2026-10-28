@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState, AppDispatch } from "@/store/store";
 import { addStudent, updateStudent, deleteStudent } from "@/store/studentSlice";
 import { StudentModal } from "@/components/StudentModal";
+import { AdminUsersManager } from "@/components/AdminUsersManager";
 import { Student } from "@/lib/studentData";
 import {
   Users,
@@ -32,28 +35,62 @@ import {
   Edit2,
   Eye,
   Trash2,
+  ShieldCheck,
+  LogOut,
+  User as UserIcon,
 } from "lucide-react";
 
 type SortKey = "id" | "name" | "course" | "year" | "status" | "gpa" | "enrolledDate";
 type SortDirection = "asc" | "desc";
 
+interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  status: "approved" | "pending" | "rejected";
+}
+
 export default function AdminHomePage() {
+  const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const students = useSelector((state: RootState) => state.students.students);
 
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [courseFilter, setCourseFilter] = useState<string>("All");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [activeTab, setActiveTab] = useState("students");
+  const [activeTab, setActiveTab] = useState<"students" | "users" | "dashboard">("students");
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
-  // Active Dropdown Menu
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  useEffect(() => {
+    // Fetch logged in user details
+    axios
+      .get("/api/auth/me")
+      .then((res) => {
+        if (res.data?.user) {
+          setCurrentUser(res.data.user);
+        }
+      })
+      .catch(() => {
+        // middleware handles redirection, but fallback here
+      });
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await axios.post("/api/auth/logout");
+      router.push("/login");
+      router.refresh();
+    } catch {
+      router.push("/login");
+    }
+  };
 
   // Distinct courses for filter dropdown
   const courses = useMemo(() => {
@@ -159,13 +196,11 @@ export default function AdminHomePage() {
   const handleOpenEdit = (student: Student) => {
     setEditingStudent(student);
     setIsModalOpen(true);
-    setOpenDropdownId(null);
   };
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to remove this student record?")) {
       dispatch(deleteStudent(id));
-      setOpenDropdownId(null);
     }
   };
 
@@ -195,20 +230,8 @@ export default function AdminHomePage() {
 
         <nav className="p-4 space-y-1.5 flex-1">
           <button
-            onClick={() => setActiveTab("dashboard")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === "dashboard"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            Dashboard
-          </button>
-
-          <button
             onClick={() => setActiveTab("students")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
               activeTab === "students"
                 ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                 : "text-slate-400 hover:text-white hover:bg-slate-800"
@@ -221,53 +244,54 @@ export default function AdminHomePage() {
             </span>
           </button>
 
-          <button
-            onClick={() => setActiveTab("courses")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === "courses"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <BookOpen className="w-4 h-4" />
-            Courses & Programs
-          </button>
-
-          <button
-            onClick={() => setActiveTab("schedule")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === "schedule"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            Academic Calendar
-          </button>
-
-          <button
-            onClick={() => setActiveTab("settings")}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === "settings"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            Settings
-          </button>
+          {/* Admin user management tab */}
+          {currentUser?.role === "admin" && (
+            <button
+              onClick={() => setActiveTab("users")}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                activeTab === "users"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-white hover:bg-slate-800"
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-purple-400" />
+              User Approvals
+            </button>
+          )}
         </nav>
 
-        {/* User Card */}
+        {/* User Card with Logout */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-bold text-sm">
-              AD
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 truncate">
+              <div className="w-9 h-9 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-bold text-xs uppercase">
+                {currentUser?.name ? currentUser.name.substring(0, 2) : "US"}
+              </div>
+              <div className="truncate">
+                <p className="text-xs font-semibold text-white truncate">
+                  {currentUser?.name || "Logged In User"}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded font-semibold uppercase ${
+                      currentUser?.role === "admin"
+                        ? "bg-purple-500/20 text-purple-300"
+                        : "bg-slate-800 text-slate-400"
+                    }`}
+                  >
+                    {currentUser?.role || "User"}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="truncate">
-              <p className="text-xs font-semibold text-white truncate">Administrator</p>
-              <p className="text-[11px] text-slate-400 truncate">admin@edupulse.edu</p>
-            </div>
+
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>
@@ -277,361 +301,377 @@ export default function AdminHomePage() {
         {/* Top Header */}
         <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-xs">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Students Directory</h2>
+            <h2 className="text-xl font-bold text-slate-900">
+              {activeTab === "users" ? "Account Approvals" : "Students Directory"}
+            </h2>
             <p className="text-xs text-slate-500">
-              Manage enrollments, inspect academic standings, and filter student records.
+              {activeTab === "users"
+                ? "Manage newly registered user access permissions and activations."
+                : "Manage enrollments, inspect academic standings, and filter student records."}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg relative transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="w-2 h-2 rounded-full bg-indigo-600 absolute top-1.5 right-1.5 ring-2 ring-white"></span>
-            </button>
+            {activeTab === "students" && (
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-all shadow-indigo-600/20 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Register Student
+              </button>
+            )}
+
             <button
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-all shadow-indigo-600/20 cursor-pointer"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              Register Student
+              <LogOut className="w-3.5 h-3.5" />
+              Sign Out
             </button>
           </div>
         </header>
 
         {/* Dashboard Body */}
         <main className="p-6 space-y-6">
-          {/* Quick Metrics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Enrolled</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">{students.length}</h3>
-                <span className="text-[11px] font-medium text-emerald-600 mt-1 inline-flex items-center gap-1">
-                  Active database records
-                </span>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <Users className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Students</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">
-                  {students.filter((s) => s.status === "Active").length}
-                </h3>
-                <span className="text-[11px] font-medium text-emerald-600 mt-1 inline-flex items-center gap-1">
-                  {students.length > 0
-                    ? `${Math.round(
-                        (students.filter((s) => s.status === "Active").length / students.length) * 100
-                      )}% retention rate`
-                    : "0%"}
-                </span>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <UserCheck className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Average GPA</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">
-                  {students.length > 0
-                    ? (students.reduce((acc, s) => acc + s.gpa, 0) / students.length).toFixed(2)
-                    : "0.00"}
-                </h3>
-                <span className="text-[11px] font-medium text-indigo-600 mt-1 inline-flex items-center gap-1">
-                  Overall academic standing
-                </span>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <GraduationCap className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Programs</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">{courses.length}</h3>
-                <span className="text-[11px] font-medium text-slate-500 mt-1 inline-flex items-center gap-1">
-                  Across campus faculties
-                </span>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                <BookOpen className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          {/* Interactive Table Container */}
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-            {/* Filter and Search Bar */}
-            <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white">
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search student by name, ID, email, or course..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 text-xs text-slate-900 placeholder:text-slate-400 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Status Dropdown */}
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
-                  <Filter className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-xs font-medium text-slate-600">Status:</span>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Active">Active</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Graduated">Graduated</option>
-                    <option value="Suspended">Suspended</option>
-                  </select>
+          {activeTab === "users" ? (
+            <AdminUsersManager />
+          ) : (
+            <>
+              {/* Quick Metrics Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Enrolled</p>
+                    <h3 className="text-2xl font-bold text-slate-900 mt-1">{students.length}</h3>
+                    <span className="text-[11px] font-medium text-emerald-600 mt-1 inline-flex items-center gap-1">
+                      Active database records
+                    </span>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <Users className="w-6 h-6" />
+                  </div>
                 </div>
 
-                {/* Course Dropdown */}
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
-                  <span className="text-xs font-medium text-slate-600">Course:</span>
-                  <select
-                    value={courseFilter}
-                    onChange={(e) => setCourseFilter(e.target.value)}
-                    className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer max-w-[140px] truncate"
-                  >
-                    <option value="All">All Courses</option>
-                    {courses.map((course) => (
-                      <option key={course} value={course}>
-                        {course}
-                      </option>
-                    ))}
-                  </select>
+                <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Students</p>
+                    <h3 className="text-2xl font-bold text-slate-900 mt-1">
+                      {students.filter((s) => s.status === "Active").length}
+                    </h3>
+                    <span className="text-[11px] font-medium text-emerald-600 mt-1 inline-flex items-center gap-1">
+                      {students.length > 0
+                        ? `${Math.round(
+                            (students.filter((s) => s.status === "Active").length / students.length) * 100
+                          )}% retention rate`
+                        : "0%"}
+                    </span>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <UserCheck className="w-6 h-6" />
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setStatusFilter("All");
-                    setCourseFilter("All");
-                  }}
-                  className="text-xs font-medium text-slate-500 hover:text-slate-800 px-2.5 py-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                >
-                  Reset
-                </button>
+                <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Average GPA</p>
+                    <h3 className="text-2xl font-bold text-slate-900 mt-1">
+                      {students.length > 0
+                        ? (students.reduce((acc, s) => acc + s.gpa, 0) / students.length).toFixed(2)
+                        : "0.00"}
+                    </h3>
+                    <span className="text-[11px] font-medium text-indigo-600 mt-1 inline-flex items-center gap-1">
+                      Overall academic standing
+                    </span>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <GraduationCap className="w-6 h-6" />
+                  </div>
+                </div>
 
-                <button className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer">
-                  <Download className="w-3.5 h-3.5 text-slate-500" />
-                  Export
-                </button>
+                <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Programs</p>
+                    <h3 className="text-2xl font-bold text-slate-900 mt-1">{courses.length}</h3>
+                    <span className="text-[11px] font-medium text-slate-500 mt-1 inline-flex items-center gap-1">
+                      Across campus faculties
+                    </span>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto min-h-[300px]">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-[11px] font-semibold uppercase tracking-wider">
-                    <th
-                      onClick={() => handleSort("id")}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Student ID</span>
-                        {getSortIcon("id")}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort("name")}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Student Name</span>
-                        {getSortIcon("name")}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort("course")}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Course</span>
-                        {getSortIcon("course")}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort("year")}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Year</span>
-                        {getSortIcon("year")}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort("gpa")}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>GPA</span>
-                        {getSortIcon("gpa")}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort("status")}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Status</span>
-                        {getSortIcon("status")}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort("enrolledDate")}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Enrolled Date</span>
-                        {getSortIcon("enrolledDate")}
-                      </div>
-                    </th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs">
-                  {filteredAndSortedStudents.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-500">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <Users className="w-8 h-8 text-slate-300" />
-                          <p className="text-sm font-semibold text-slate-700">No students found</p>
-                          <p className="text-xs text-slate-400">
-                            Try adjusting your search query or clear the active filters.
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredAndSortedStudents.map((student) => (
-                      <tr
-                        key={student.id}
-                        className="hover:bg-indigo-50/40 transition-colors group relative"
+              {/* Interactive Table Container */}
+              <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+                {/* Filter and Search Bar */}
+                <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search student by name, ID, email, or course..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 text-xs text-slate-900 placeholder:text-slate-400 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Status Dropdown */}
+                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                      <Filter className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-xs font-medium text-slate-600">Status:</span>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
                       >
-                        <td className="py-3.5 px-4 font-mono font-medium text-slate-600">
-                          <Link
-                            href={`/students/${encodeURIComponent(student.id)}`}
-                            className="text-indigo-600 hover:text-indigo-800 font-semibold hover:underline"
+                        <option value="All">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Graduated">Graduated</option>
+                        <option value="Suspended">Suspended</option>
+                      </select>
+                    </div>
+
+                    {/* Course Dropdown */}
+                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                      <span className="text-xs font-medium text-slate-600">Course:</span>
+                      <select
+                        value={courseFilter}
+                        onChange={(e) => setCourseFilter(e.target.value)}
+                        className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer max-w-[140px] truncate"
+                      >
+                        <option value="All">All Courses</option>
+                        {courses.map((course) => (
+                          <option key={course} value={course}>
+                            {course}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setSearchQuery("");
+                        setStatusFilter("All");
+                        setCourseFilter("All");
+                      }}
+                      className="text-xs font-medium text-slate-500 hover:text-slate-800 px-2.5 py-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Reset
+                    </button>
+
+                    <button className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer">
+                      <Download className="w-3.5 h-3.5 text-slate-500" />
+                      Export
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto min-h-[300px]">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-[11px] font-semibold uppercase tracking-wider">
+                        <th
+                          onClick={() => handleSort("id")}
+                          className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Student ID</span>
+                            {getSortIcon("id")}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("name")}
+                          className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Student Name</span>
+                            {getSortIcon("name")}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("course")}
+                          className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Course</span>
+                            {getSortIcon("course")}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("year")}
+                          className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Year</span>
+                            {getSortIcon("year")}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("gpa")}
+                          className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>GPA</span>
+                            {getSortIcon("gpa")}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("status")}
+                          className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Status</span>
+                            {getSortIcon("status")}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("enrolledDate")}
+                          className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Enrolled Date</span>
+                            {getSortIcon("enrolledDate")}
+                          </div>
+                        </th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {filteredAndSortedStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-500">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Users className="w-8 h-8 text-slate-300" />
+                              <p className="text-sm font-semibold text-slate-700">No students found</p>
+                              <p className="text-xs text-slate-400">
+                                Try adjusting your search query or clear the active filters.
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredAndSortedStudents.map((student) => (
+                          <tr
+                            key={student.id}
+                            className="hover:bg-indigo-50/40 transition-colors group relative"
                           >
-                            {student.id}
-                          </Link>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={student.avatar}
-                              alt={student.name}
-                              className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200"
-                            />
-                            <div>
+                            <td className="py-3.5 px-4 font-mono font-medium text-slate-600">
                               <Link
                                 href={`/students/${encodeURIComponent(student.id)}`}
-                                className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors block"
+                                className="text-indigo-600 hover:text-indigo-800 font-semibold hover:underline"
                               >
-                                {student.name}
+                                {student.id}
                               </Link>
-                              <p className="text-[11px] text-slate-500">{student.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-700 font-medium">
-                          {student.course}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-600">
-                          <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[11px]">
-                            {student.year}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={`font-semibold ${
-                              student.gpa >= 3.8
-                                ? "text-emerald-600 font-bold"
-                                : student.gpa >= 3.0
-                                ? "text-slate-800"
-                                : "text-rose-600"
-                            }`}
-                          >
-                            {student.gpa.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">{getStatusBadge(student.status)}</td>
-                        <td className="py-3.5 px-4 text-slate-500">{student.enrolledDate}</td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="inline-flex items-center gap-1 justify-end">
-                            <Link
-                              href={`/students/${encodeURIComponent(student.id)}`}
-                              title="View Details"
-                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Link>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={student.avatar}
+                                  alt={student.name}
+                                  className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200"
+                                />
+                                <div>
+                                  <Link
+                                    href={`/students/${encodeURIComponent(student.id)}`}
+                                    className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors block"
+                                  >
+                                    {student.name}
+                                  </Link>
+                                  <p className="text-[11px] text-slate-500">{student.email}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-700 font-medium">
+                              {student.course}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600">
+                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[11px]">
+                                {student.year}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`font-semibold ${
+                                  student.gpa >= 3.8
+                                    ? "text-emerald-600 font-bold"
+                                    : student.gpa >= 3.0
+                                    ? "text-slate-800"
+                                    : "text-rose-600"
+                                }`}
+                              >
+                                {student.gpa.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4">{getStatusBadge(student.status)}</td>
+                            <td className="py-3.5 px-4 text-slate-500">{student.enrolledDate}</td>
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="inline-flex items-center gap-1 justify-end">
+                                <Link
+                                  href={`/students/${encodeURIComponent(student.id)}`}
+                                  title="View Details"
+                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Link>
 
-                            <button
-                              onClick={() => handleOpenEdit(student)}
-                              title="Edit Student"
-                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
+                                <button
+                                  onClick={() => handleOpenEdit(student)}
+                                  title="Edit Student"
+                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
 
-                            <button
-                              onClick={() => handleDelete(student.id)}
-                              title="Delete Record"
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                                <button
+                                  onClick={() => handleDelete(student.id)}
+                                  title="Delete Record"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-            {/* Pagination / Summary Footer */}
-            <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 bg-slate-50/50">
-              <p>
-                Showing{" "}
-                <span className="font-semibold text-slate-800">
-                  {filteredAndSortedStudents.length}
-                </span>{" "}
-                of <span className="font-semibold text-slate-800">{students.length}</span> students
-              </p>
+                {/* Pagination / Summary Footer */}
+                <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 bg-slate-50/50">
+                  <p>
+                    Showing{" "}
+                    <span className="font-semibold text-slate-800">
+                      {filteredAndSortedStudents.length}
+                    </span>{" "}
+                    of <span className="font-semibold text-slate-800">{students.length}</span> students
+                  </p>
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  disabled
-                  className="p-1.5 rounded-md border border-slate-200 text-slate-400 bg-white disabled:opacity-50 cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button className="px-3 py-1 rounded-md bg-indigo-600 text-white font-medium">
-                  1
-                </button>
-                <button className="p-1.5 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100 bg-white transition-colors">
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      disabled
+                      className="p-1.5 rounded-md border border-slate-200 text-slate-400 bg-white disabled:opacity-50 cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button className="px-3 py-1 rounded-md bg-indigo-600 text-white font-medium">
+                      1
+                    </button>
+                    <button className="p-1.5 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100 bg-white transition-colors">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </main>
       </div>
 
