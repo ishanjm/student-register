@@ -1,6 +1,12 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
+import { useSelector, useDispatch } from "react-redux";
+import { RootState, AppDispatch } from "@/store/store";
+import { addStudent, updateStudent, deleteStudent } from "@/store/studentSlice";
+import { StudentModal } from "@/components/StudentModal";
+import { Student } from "@/lib/studentData";
 import {
   Users,
   GraduationCap,
@@ -22,118 +28,19 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
   UserCheck,
+  Edit2,
+  Eye,
+  Trash2,
 } from "lucide-react";
-
-interface Student {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  course: string;
-  year: string;
-  status: "Active" | "Pending" | "Suspended" | "Graduated";
-  enrolledDate: string;
-  gpa: number;
-}
-
-const INITIAL_STUDENTS: Student[] = [
-  {
-    id: "STU-2026-001",
-    name: "Aiden Montgomery",
-    email: "aiden.m@university.edu",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-    course: "Computer Science",
-    year: "Year 3",
-    status: "Active",
-    enrolledDate: "2024-09-01",
-    gpa: 3.88,
-  },
-  {
-    id: "STU-2026-002",
-    name: "Sophia Rodriguez",
-    email: "sophia.r@university.edu",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-    course: "Biomedical Engineering",
-    year: "Year 2",
-    status: "Active",
-    enrolledDate: "2025-01-15",
-    gpa: 3.94,
-  },
-  {
-    id: "STU-2026-003",
-    name: "Marcus Chen",
-    email: "marcus.chen@university.edu",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-    course: "Business Administration",
-    year: "Year 4",
-    status: "Graduated",
-    enrolledDate: "2023-09-10",
-    gpa: 3.65,
-  },
-  {
-    id: "STU-2026-004",
-    name: "Amara Okafor",
-    email: "amara.o@university.edu",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
-    course: "Data Science & AI",
-    year: "Year 1",
-    status: "Pending",
-    enrolledDate: "2026-02-01",
-    gpa: 3.72,
-  },
-  {
-    id: "STU-2026-005",
-    name: "Liam O'Connor",
-    email: "liam.oc@university.edu",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
-    course: "Cyber Security",
-    year: "Year 3",
-    status: "Active",
-    enrolledDate: "2024-09-01",
-    gpa: 3.45,
-  },
-  {
-    id: "STU-2026-006",
-    name: "Elena Rostova",
-    email: "elena.r@university.edu",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
-    course: "Architecture & Design",
-    year: "Year 2",
-    status: "Suspended",
-    enrolledDate: "2025-02-10",
-    gpa: 2.89,
-  },
-  {
-    id: "STU-2026-007",
-    name: "Devon Vance",
-    email: "devon.v@university.edu",
-    avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80",
-    course: "Electrical Engineering",
-    year: "Year 1",
-    status: "Active",
-    enrolledDate: "2026-01-20",
-    gpa: 3.55,
-  },
-  {
-    id: "STU-2026-008",
-    name: "Chloe Dupont",
-    email: "chloe.d@university.edu",
-    avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80",
-    course: "International Relations",
-    year: "Year 4",
-    status: "Active",
-    enrolledDate: "2023-09-12",
-    gpa: 3.82,
-  },
-];
 
 type SortKey = "id" | "name" | "course" | "year" | "status" | "gpa" | "enrolledDate";
 type SortDirection = "asc" | "desc";
 
 export default function AdminHomePage() {
-  const [students] = useState<Student[]>(INITIAL_STUDENTS);
+  const dispatch = useDispatch<AppDispatch>();
+  const students = useSelector((state: RootState) => state.students.students);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [courseFilter, setCourseFilter] = useState<string>("All");
@@ -141,10 +48,17 @@ export default function AdminHomePage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [activeTab, setActiveTab] = useState("students");
 
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+
+  // Active Dropdown Menu
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
   // Distinct courses for filter dropdown
   const courses = useMemo(() => {
-    return Array.from(new Set(INITIAL_STUDENTS.map((s) => s.course)));
-  }, []);
+    return Array.from(new Set(students.map((s) => s.course)));
+  }, [students]);
 
   // Filtering and Sorting
   const filteredAndSortedStudents = useMemo(() => {
@@ -165,8 +79,8 @@ export default function AdminHomePage() {
         return matchesQuery && matchesStatus && matchesCourse;
       })
       .sort((a, b) => {
-        let valA = a[sortKey];
-        let valB = b[sortKey];
+        const valA = a[sortKey];
+        const valB = b[sortKey];
 
         if (typeof valA === "string") {
           return sortDirection === "asc"
@@ -234,6 +148,32 @@ export default function AdminHomePage() {
             Graduated
           </span>
         );
+    }
+  };
+
+  const handleOpenAdd = () => {
+    setEditingStudent(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (student: Student) => {
+    setEditingStudent(student);
+    setIsModalOpen(true);
+    setOpenDropdownId(null);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to remove this student record?")) {
+      dispatch(deleteStudent(id));
+      setOpenDropdownId(null);
+    }
+  };
+
+  const handleModalSubmit = (student: Student) => {
+    if (editingStudent) {
+      dispatch(updateStudent(student));
+    } else {
+      dispatch(addStudent(student));
     }
   };
 
@@ -348,7 +288,10 @@ export default function AdminHomePage() {
               <Bell className="w-5 h-5" />
               <span className="w-2 h-2 rounded-full bg-indigo-600 absolute top-1.5 right-1.5 ring-2 ring-white"></span>
             </button>
-            <button className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3.5 py-2 rounded-lg shadow-sm transition-all shadow-indigo-600/20">
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-all shadow-indigo-600/20 cursor-pointer"
+            >
               <Plus className="w-4 h-4" />
               Register Student
             </button>
@@ -362,9 +305,9 @@ export default function AdminHomePage() {
             <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Enrolled</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">1,482</h3>
+                <h3 className="text-2xl font-bold text-slate-900 mt-1">{students.length}</h3>
                 <span className="text-[11px] font-medium text-emerald-600 mt-1 inline-flex items-center gap-1">
-                  ↑ +8.4% vs last term
+                  Active database records
                 </span>
               </div>
               <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
@@ -375,9 +318,15 @@ export default function AdminHomePage() {
             <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Students</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">1,390</h3>
+                <h3 className="text-2xl font-bold text-slate-900 mt-1">
+                  {students.filter((s) => s.status === "Active").length}
+                </h3>
                 <span className="text-[11px] font-medium text-emerald-600 mt-1 inline-flex items-center gap-1">
-                  93.8% retention rate
+                  {students.length > 0
+                    ? `${Math.round(
+                        (students.filter((s) => s.status === "Active").length / students.length) * 100
+                      )}% retention rate`
+                    : "0%"}
                 </span>
               </div>
               <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -388,9 +337,13 @@ export default function AdminHomePage() {
             <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Average GPA</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">3.61</h3>
+                <h3 className="text-2xl font-bold text-slate-900 mt-1">
+                  {students.length > 0
+                    ? (students.reduce((acc, s) => acc + s.gpa, 0) / students.length).toFixed(2)
+                    : "0.00"}
+                </h3>
                 <span className="text-[11px] font-medium text-indigo-600 mt-1 inline-flex items-center gap-1">
-                  Dean&apos;s Honor standard
+                  Overall academic standing
                 </span>
               </div>
               <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -401,9 +354,9 @@ export default function AdminHomePage() {
             <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Programs</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">24</h3>
+                <h3 className="text-2xl font-bold text-slate-900 mt-1">{courses.length}</h3>
                 <span className="text-[11px] font-medium text-slate-500 mt-1 inline-flex items-center gap-1">
-                  Across 6 faculties
+                  Across campus faculties
                 </span>
               </div>
               <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -468,12 +421,12 @@ export default function AdminHomePage() {
                     setStatusFilter("All");
                     setCourseFilter("All");
                   }}
-                  className="text-xs font-medium text-slate-500 hover:text-slate-800 px-2.5 py-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="text-xs font-medium text-slate-500 hover:text-slate-800 px-2.5 py-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 >
                   Reset
                 </button>
 
-                <button className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg shadow-2xs transition-colors">
+                <button className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer">
                   <Download className="w-3.5 h-3.5 text-slate-500" />
                   Export
                 </button>
@@ -481,7 +434,7 @@ export default function AdminHomePage() {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto min-h-[300px]">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-600 text-[11px] font-semibold uppercase tracking-wider">
@@ -568,10 +521,15 @@ export default function AdminHomePage() {
                     filteredAndSortedStudents.map((student) => (
                       <tr
                         key={student.id}
-                        className="hover:bg-indigo-50/40 transition-colors group"
+                        className="hover:bg-indigo-50/40 transition-colors group relative"
                       >
                         <td className="py-3.5 px-4 font-mono font-medium text-slate-600">
-                          {student.id}
+                          <Link
+                            href={`/students/${encodeURIComponent(student.id)}`}
+                            className="text-indigo-600 hover:text-indigo-800 font-semibold hover:underline"
+                          >
+                            {student.id}
+                          </Link>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
@@ -581,9 +539,12 @@ export default function AdminHomePage() {
                               className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200"
                             />
                             <div>
-                              <p className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                              <Link
+                                href={`/students/${encodeURIComponent(student.id)}`}
+                                className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors block"
+                              >
                                 {student.name}
-                              </p>
+                              </Link>
                               <p className="text-[11px] text-slate-500">{student.email}</p>
                             </div>
                           </div>
@@ -612,9 +573,31 @@ export default function AdminHomePage() {
                         <td className="py-3.5 px-4">{getStatusBadge(student.status)}</td>
                         <td className="py-3.5 px-4 text-slate-500">{student.enrolledDate}</td>
                         <td className="py-3.5 px-4 text-right">
-                          <button className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors">
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
+                          <div className="inline-flex items-center gap-1 justify-end">
+                            <Link
+                              href={`/students/${encodeURIComponent(student.id)}`}
+                              title="View Details"
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Link>
+
+                            <button
+                              onClick={() => handleOpenEdit(student)}
+                              title="Edit Student"
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => handleDelete(student.id)}
+                              title="Delete Record"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -651,6 +634,17 @@ export default function AdminHomePage() {
           </div>
         </main>
       </div>
+
+      {/* Register / Edit Modal */}
+      <StudentModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingStudent(null);
+        }}
+        onSubmit={handleModalSubmit}
+        initialData={editingStudent}
+      />
     </div>
   );
 }
