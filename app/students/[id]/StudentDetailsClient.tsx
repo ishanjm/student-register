@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import axios from "axios";
 import { useSelector } from "react-redux";
 import { RootState } from "@/store/store";
 import {
@@ -20,31 +21,61 @@ import {
   AlertCircle,
   FileText,
   School,
+  RefreshCw,
 } from "lucide-react";
 import { Student } from "@/lib/studentData";
 
 export default function StudentDetailsClient({ studentId }: { studentId: string }) {
-  const students = useSelector((state: RootState) => state.students.students);
+  const reduxStudents = useSelector((state: RootState) => state.students.students);
 
-  const student = students.find(
+  // Local state for fetched student if navigated directly to URL
+  const [fetchedStudent, setFetchedStudent] = useState<Student | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Try finding student in Redux store first
+  const existingFromRedux = reduxStudents.find(
     (s) => s.id.toLowerCase() === studentId.toLowerCase()
-  ) || {
-    id: studentId,
-    name: "Enrolled Student",
-    email: `${studentId.toLowerCase()}@university.edu`,
-    phone: "+1 (555) 000-0000",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-    course: "Computer Science & Engineering",
-    year: "Year 3",
-    status: "Active" as const,
-    enrolledDate: "2024-09-01",
-    gpa: 3.85,
-    dateOfBirth: "2004-05-15",
-    address: "Campus Housing Hall 4, Room 204",
-    guardianName: "Family Contact",
-    emergencyContact: "+1 (555) 999-1111",
-    bio: "Undergraduate student currently conducting academic research and projects in departmental labs.",
-  };
+  );
+
+  useEffect(() => {
+    if (!existingFromRedux && studentId) {
+      setLoading(true);
+      axios
+        .get(`/api/students/${encodeURIComponent(studentId)}`)
+        .then((res) => {
+          if (res.data?.student) {
+            setFetchedStudent(res.data.student);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not fetch student by ID from API:", err);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [existingFromRedux, studentId]);
+
+  const student =
+    existingFromRedux ||
+    fetchedStudent || {
+      id: studentId,
+      name: "Enrolled Student",
+      email: `${studentId.toLowerCase()}@university.edu`,
+      phone: "+1 (555) 000-0000",
+      avatar:
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      course: "General Studies",
+      year: "Year 1",
+      status: "Active" as const,
+      enrolledDate: "2024-09-01",
+      gpa: 3.5,
+      dateOfBirth: "2004-05-15",
+      address: "Campus Housing Hall 4",
+      guardianName: "Family Contact",
+      emergencyContact: "+1 (555) 999-1111",
+      bio: "Undergraduate student currently conducting academic research and coursework.",
+    };
 
   const getStatusBadge = (status: Student["status"]) => {
     switch (status) {
@@ -92,6 +123,7 @@ export default function StudentDetailsClient({ studentId }: { studentId: string 
             Back to Students Directory
           </Link>
           <div className="flex items-center gap-2">
+            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />}
             <span className="text-xs text-slate-400">Student Profile:</span>
             <span className="text-xs font-mono font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
               {student.id}
@@ -118,7 +150,8 @@ export default function StudentDetailsClient({ studentId }: { studentId: string 
                   {getStatusBadge(student.status)}
                 </div>
                 <p className="text-xs text-slate-500 font-medium">
-                  {student.course} • <span className="text-indigo-600 font-semibold">{student.year}</span>
+                  {student.course} •{" "}
+                  <span className="text-indigo-600 font-semibold">{student.year}</span>
                 </p>
               </div>
             </div>
@@ -147,7 +180,9 @@ export default function StudentDetailsClient({ studentId }: { studentId: string 
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                   <p className="text-[11px] text-slate-500 font-medium">Current GPA</p>
-                  <p className="text-xl font-bold text-indigo-600 mt-1">{student.gpa.toFixed(2)}</p>
+                  <p className="text-xl font-bold text-indigo-600 mt-1">
+                    {(student.gpa || 3.5).toFixed(2)}
+                  </p>
                   <span className="text-[10px] text-slate-400">Scale of 4.0</span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">

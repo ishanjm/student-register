@@ -1,11 +1,7 @@
-import { INITIAL_STUDENTS } from "@/lib/studentData";
+import { Suspense } from "react";
 import StudentDetailsClient from "./StudentDetailsClient";
 
-export function generateStaticParams() {
-  return INITIAL_STUDENTS.map((student) => ({
-    id: student.id,
-  }));
-}
+export const dynamic = "force-dynamic";
 
 export default async function StudentDetailsPage({
   params,
@@ -13,5 +9,16 @@ export default async function StudentDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <StudentDetailsClient studentId={decodeURIComponent(id)} />;
+
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-xs text-slate-500">
+          Loading student profile...
+        </div>
+      }
+    >
+      <StudentDetailsClient studentId={decodeURIComponent(id)} />
+    </Suspense>
+  );
 }
